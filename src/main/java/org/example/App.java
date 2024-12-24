@@ -39,7 +39,7 @@ public class App {
 
         // Step 1
         HadoopJarStepConfig step1 = new HadoopJarStepConfig()
-                .withJar("s3n://yourbucket/yourfile.jar") // This should be a full map reduce application.
+                .withJar("s3n://yuvalhagarwordprediction/yourfile.jar") // This should be a full map reduce application.
                 .withMainClass("Step1");
 
         StepConfig stepConfig1 = new StepConfig()
@@ -62,7 +62,7 @@ public class App {
                 .withName("Map reduce project") // jobname
                 .withInstances(instances)
                 .withSteps(stepConfig1) //change according to the number of steps
-                .withLogUri("s3n://yourbucket/logs/")
+                .withLogUri("s3n://yuvalhagarwordprediction/logs/")
                 .withServiceRole("EMR_DefaultRole")
                 .withJobFlowRole("EMR_EC2_DefaultRole")
                 .withReleaseLabel("emr-5.11.0");
