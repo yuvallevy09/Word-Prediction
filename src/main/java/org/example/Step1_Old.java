@@ -6,7 +6,6 @@ import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
@@ -20,9 +19,8 @@ import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
-import java.util.StringTokenizer;
 
-public class WordPrediction {
+public class Step1_Old {
 
 public  class UniMapper extends Mapper<LongWritable, Text, Text, LongWritable> {
     private LongWritable matchCount = new LongWritable();
@@ -253,7 +251,7 @@ public  class UniMapper extends Mapper<LongWritable, Text, Text, LongWritable> {
     Configuration conf = new Configuration();
 
     Job job = Job.getInstance(conf, "Word Prediction");
-    job.setJarByClass(WordPrediction.class);
+    job.setJarByClass(Step1_Old.class);
      // Set the appropriate mapper class based on the input data
      // Set the input paths and mappers for each n-gram
      MultipleInputs.addInputPath(job, new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/1gram/data"), TextInputFormat.class, UniMapper.class);
