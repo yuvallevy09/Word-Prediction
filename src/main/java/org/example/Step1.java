@@ -3,6 +3,10 @@ package org.example;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
@@ -16,6 +20,18 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 public class Step1 {
+    static Set<String> stopWords = new HashSet<>(Arrays.asList(
+            "׳", "של", "רב", "פי", "עם", "עליו", "עליהם", "על", "עד", "מן", "מכל", "מי", "מהם", "מה", "מ",
+            "למה", "לכל", "לי", "לו", "להיות", "לה", "לא", "כן", "כמה", "כלי", "כל", "כי", "יש", "ימים", "יותר",
+            "יד", "י", "זה", "ז", "ועל", "ומי", "ולא", "וכן", "וכל", "והיא", "והוא", "ואם", "ו", "הרבה", "הנה",
+            "היו", "היה", "היא", "הזה", "הוא", "דבר", "ד", "ג", "בני", "בכל", "בו", "בה", "בא", "את", "אשר", "אם",
+            "אלה", "אל", "אך", "איש", "אין", "אחת", "אחר", "אחד", "אז", "אותו", "־", "^", "?", ";", ":", "1", ".",
+            "-", "*", "\"", "!", "שלשה", "בעל", "פני", ")", "גדול", "שם", "עלי", "עולם", "מקום", "לעולם", "לנו",
+            "להם", "ישראל", "יודע", "זאת", "השמים", "הזאת", "הדברים", "הדבר", "הבית", "האמת", "דברי", "במקום",
+            "בהם", "אמרו", "אינם", "אחרי", "אותם", "אדם", "(", "חלק", "שני", "שכל", "שאר", "ש", "ר", "פעמים",
+            "נעשה", "ן", "ממנו", "מלא", "מזה", "ם", "לפי", "ל", "כמו", "כבר", "כ", "זו", "ומה", "ולכל", "ובין",
+            "ואין", "הן", "היתה", "הא", "ה", "בל", "בין", "בזה", "ב", "אף", "אי", "אותה", "או", "אבל", "א"
+    ));
 
     public static class CompositeKey implements WritableComparable<CompositeKey> {
         private String type;     // "N" or "C"
@@ -62,24 +78,22 @@ public class Step1 {
                 // Compare w2 only if both keys have a w2
                 if (!w2.equals("*") && !other.w2.equals("*")) {
                     cmp = w2.compareTo(other.w2);
-                    if (cmp != 0) return cmp;
+                    if (cmp != 0) return cmp; // if w2 = other.w2, cmp = 0 => continue to next if
                 } else {
                     // If one has w2 and other doesn't, the one without w2 comes first
                     if (w2.equals("*")) return -1;
-                    if (other.w2.equals("*")) return 1;
+                    return 1; // Only other.w2 is "*"
                 }
 
-                // For records with same w2 (or both without w2), sort by w1
+                // For records with same w2, sort by w1
                 if (!w1.equals("*") && !other.w1.equals("*")) {
                     return w1.compareTo(other.w1);
                 } else {
                     // If one has w1 and other doesn't, the one without w1 comes first
                     if (w1.equals("*")) return -1;
-                    if (other.w1.equals("*")) return 1;
-                    return 0;
+                    return 1;
                 }
-            } else {
-                // C-type sorting logic
+            } else { // C-type sorting logic
                 // First by w2
                 cmp = w2.compareTo(other.w2);
                 if (cmp != 0) return cmp;
@@ -113,10 +127,7 @@ public class Step1 {
         public static enum Counters {
             TOTAL_WORDS
         }
-
         private final LongWritable count = new LongWritable();
-        private final CompositeKey nKey = new CompositeKey();
-        private final CompositeKey cKey = new CompositeKey();
 
         @Override
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
@@ -124,31 +135,23 @@ public class Step1 {
             if (parts.length >= 3) {
                 String word = parts[0].trim();
                 // Skip stop words
-                if (isStopWord(word)) return;
+                if (!stopWords.contains(word)) {
+                    long matchCount = Long.parseLong(parts[2]);
+                    // Increment C0 counter
+                    context.getCounter(Counters.TOTAL_WORDS).increment(matchCount);
 
-                long matchCount = Long.parseLong(parts[2]);
-                // Increment C0 counter
-                context.getCounter(Counters.TOTAL_WORDS).increment(matchCount);
-
-                count.set(matchCount);
-
-                // Emit for N1
-                context.write(new CompositeKey("N", "*", "*", word), count);
-                // Emit for C1
-                context.write(new CompositeKey("C", word, "*", "*"), count);
+                    count.set(matchCount);
+                    // Emit for N1
+                    context.write(new CompositeKey("N", "*", "*", word), count);
+                    // Emit for C1
+                    context.write(new CompositeKey("C", "*", word, "*"), count);
+                }
             }
-        }
-
-        private boolean isStopWord(String word) {
-            // Implement stop word checking here
-            return false;
         }
     }
 
     public static class BiMapper extends Mapper<LongWritable, Text, CompositeKey, LongWritable> {
         private final LongWritable count = new LongWritable();
-        private final CompositeKey nKey = new CompositeKey();
-        private final CompositeKey cKey = new CompositeKey();
 
         @Override
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
@@ -160,21 +163,16 @@ public class Step1 {
                     String w2 = words[1].trim();
 
                     // Skip if either word is a stop word
-                    if (isStopWord(w1) || isStopWord(w2)) return;
+                    if (stopWords.contains(w1) || stopWords.contains(w2)) return;
 
                     long matchCount = Long.parseLong(parts[2]);
                     count.set(matchCount);
 
                     // Only emit if this bigram will be needed
                     context.write(new CompositeKey("N", "*", w1, w2), count);
-                    context.write(new CompositeKey("C", w1, w2, "*"), count);
+                    context.write(new CompositeKey("C", w1, w2, "*"), count); // w3 is not compared for C-Keys
                 }
             }
-        }
-
-        private boolean isStopWord(String word) {
-            // Implement stop word checking here
-            return false;
         }
     }
 
@@ -192,7 +190,7 @@ public class Step1 {
                     String w3 = words[2].trim();
 
                     // Skip if any word is a stop word
-                    if (isStopWord(w1) || isStopWord(w2) || isStopWord(w3)) return;
+                    if (stopWords.contains(w1) || stopWords.contains(w2) || stopWords.contains(w3)) return;
 
                     long matchCount = Long.parseLong(parts[2]);
                     count.set(matchCount);
@@ -201,11 +199,6 @@ public class Step1 {
                     context.write(new CompositeKey("N", w1, w2, w3), count);
                 }
             }
-        }
-
-        private boolean isStopWord(String word) {
-            // Implement stop word checking here
-            return false;
         }
     }
 
@@ -283,10 +276,10 @@ public class Step1 {
 
     public static void main(String[] args) throws Exception {
         // Input validation
-        if (args.length != 2) {
-            System.err.println("Usage: Step1 <input path> <output path>");
-            System.exit(2);
-        }
+//        if (args.length != 2) {
+//            System.err.println("Usage: Step1 <input path> <output path>");
+//            System.exit(2);
+//        }
 
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "Word Prediction Step 1");
@@ -317,7 +310,8 @@ public class Step1 {
                 SequenceFileInputFormat.class, TriMapper.class);
 
         // Set output path
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        //FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        FileOutputFormat.setOutputPath(job, new Path("s3://yuvalhagarwordprediction/output_step1"));
 
         // Set output format
         job.setOutputFormatClass(TextOutputFormat.class);
@@ -329,13 +323,12 @@ public class Step1 {
             long c0 = job.getCounters().findCounter(UniMapper.Counters.TOTAL_WORDS).getValue();
             // Write C0 to a file in the output directory
             Configuration conf2 = new Configuration();
-            org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf2);
-            Path c0File = new Path(args[1] + "/C0.txt");
+            org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf2); //need to check
+            Path c0File = new Path("s3://yuvalhagarwordprediction/output_step1" + "/C0.txt");
             org.apache.hadoop.fs.FSDataOutputStream out = fs.create(c0File);
             out.writeBytes(String.valueOf(c0));
             out.close();
         }
-
         System.exit(success ? 0 : 1);
     }
 }

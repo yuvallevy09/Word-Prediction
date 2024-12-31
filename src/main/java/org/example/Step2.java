@@ -16,208 +16,159 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
-import java.util.*;
 
 public class Step2 {
-
-    // Simple key class just for grouping by w1,w2
-    public static class BigramKey implements WritableComparable<BigramKey> {
+    public static class TrigramKey implements WritableComparable<TrigramKey> {
         private String w1;
         private String w2;
+        private String w3;
 
-        public BigramKey() {}
-
-        public BigramKey(String w1, String w2) {
+        public TrigramKey(String w1, String w2, String w3) {
             this.w1 = w1;
             this.w2 = w2;
+            this.w3 = w3;
         }
 
         @Override
         public void write(DataOutput out) throws IOException {
             Text.writeString(out, w1);
             Text.writeString(out, w2);
+            Text.writeString(out, w3);
         }
 
         @Override
         public void readFields(DataInput in) throws IOException {
             w1 = Text.readString(in);
             w2 = Text.readString(in);
+            w3 = Text.readString(in);
         }
 
         @Override
-        public int compareTo(BigramKey other) {
-            return 0; // Order doesn't matter, just need grouping
-        }
+        public int compareTo(TrigramKey other) {
+            // First compare w1
+            int cmp = w1.compareTo(other.w1);
+            if (cmp != 0) return cmp;
 
-        @Override
-        public int hashCode() {
-            return (w1 + " " + w2).hashCode();
-        }
+            // Then compare w2
+            cmp = w2.compareTo(other.w2);
+            if (cmp != 0) return cmp;
 
-        @Override
-        public boolean equals(Object obj) {
-            if (obj instanceof BigramKey) {
-                BigramKey other = (BigramKey) obj;
-                return w1.equals(other.w1) && w2.equals(other.w2);
-            }
-            return false;
+            // If one has w3="*", it comes first
+            if (w3.equals("*")) return -1;
+            if (other.w3.equals("*")) return 1;
+
+            // Otherwise, compare w3
+            return w3.compareTo(other.w3);
         }
     }
 
-    // Mapper for C-type records
-    public static class CMapper extends Mapper<LongWritable, Text, BigramKey, Text> {
+    public static class TrigramPartitioner extends Partitioner<TrigramKey, Text> {
+        @Override
+        public int getPartition(TrigramKey key, Text value, int numReduceTasks) {
+            return (key.w1 + " " + key.w2).hashCode() % numReduceTasks;
+        }
+    }
+
+    public static class Step2Mapper extends Mapper<LongWritable, Text, TrigramKey, Text> {
+        @Override
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            try {
+                String[] parts = value.toString().split("\t");
+                String type = parts[0];
+
+                if (type.equals("C")) {
+                    // Input format: C w1 w2 C1 C2
+                    context.write(new TrigramKey(parts[1], parts[2], "*"),
+                            new Text(parts[3] + "\t" + parts[4]));
+                } else if (type.equals("N")) {
+                    // Input format: N w1 w2 w3 N1 N2 N3
+                    context.write(new TrigramKey(parts[1], parts[2], parts[3]),
+                            new Text(parts[4] + "\t" + parts[5] + "\t" + parts[6]));
+                }
+            } catch (Exception e) {
+                context.getCounter("Error", "MapperError").increment(1);
+            }
+        }
+    }
+
+    public static class ProbabilityReducer extends Reducer<TrigramKey, Text, Text, Text> {
+        private String currentW1 = null;
+        private String currentW2 = null;
+        private long[] cValues = null;  // [C0, C1, C2]
         private long C0;
-        private final Text outputValue = new Text();
-        private Map<BigramKey, String> bigramCValues = new HashMap<>();
-
-        @Override
-        protected void setup(Context context) throws IOException, InterruptedException {
-            Configuration conf = context.getConfiguration();
-            Path c0File = new Path(conf.get("c0_path"));
-            org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf);
-            try (org.apache.hadoop.fs.FSDataInputStream in = fs.open(c0File)) {
-                C0 = Long.parseLong(in.readLine().trim());
-            }
-        }
-
-        @Override
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] parts = value.toString().split("\t");
-            if (parts[0].equals("C")) {
-                String w1 = parts[1];
-                String w2 = parts[2];
-                BigramKey bigramKey = new BigramKey(w1, w2);
-                // Store C0, C1, C2
-                String valueStr = String.format("C\t%d\t%d\t%d", C0, Long.parseLong(parts[3]), Long.parseLong(parts[4]));
-                bigramCValues.put(bigramKey, valueStr);
-            }
-        }
-
-        @Override
-        protected void cleanup(Context context) throws IOException, InterruptedException {
-            for (Map.Entry<BigramKey, String> entry : bigramCValues.entrySet()) {
-                outputValue.set(entry.getValue());
-                context.write(entry.getKey(), outputValue);
-            }
-        }
-    }
-
-    // Mapper for N-type records
-    public static class NMapper extends Mapper<LongWritable, Text, BigramKey, Text> {
-        private final Text outputValue = new Text();
-        private Map<BigramKey, Set<String>> bigramNValues = new HashMap<>();
-
-        @Override
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] parts = value.toString().split("\t");
-            if (parts[0].equals("N")) {
-                String w1 = parts[1];
-                String w2 = parts[2];
-                String w3 = parts[3];
-                BigramKey bigramKey = new BigramKey(w1, w2);
-
-                // Store N1, N2, N3, w3
-                String valueStr = String.format("N\t%d\t%d\t%d\t%s",
-                        Long.parseLong(parts[4]),
-                        Long.parseLong(parts[5]),
-                        Long.parseLong(parts[6]),
-                        w3);
-
-                bigramNValues.computeIfAbsent(bigramKey, k -> new HashSet<>()).add(valueStr);
-            }
-        }
-
-        public static class BigramPartitioner extends Partitioner<BigramKey, Text> {
-            @Override
-            public int getPartition(BigramKey key, Text value, int numReduceTasks) {
-                // Use w1 and w2 to determine the partition
-                return (key.w1 + " " + key.w2).hashCode() % numReduceTasks;
-            }
-        }
-
-        @Override
-        protected void cleanup(Context context) throws IOException, InterruptedException {
-            for (Map.Entry<BigramKey, Set<String>> entry : bigramNValues.entrySet()) {
-                for (String value : entry.getValue()) {
-                    outputValue.set(value);
-                    context.write(entry.getKey(), outputValue);
-                }
-            }
-        }
-    }
-
-    // Combiner to reduce data transfer
-    public static class ProbabilityCombiner extends Reducer<BigramKey, Text, BigramKey, Text> {
-        @Override
-        public void reduce(BigramKey key, Iterable<Text> values, Context context)
-                throws IOException, InterruptedException {
-            String cValue = null;
-            Set<String> nValues = new HashSet<>();
-
-            for (Text value : values) {
-                String valueStr = value.toString();
-                if (valueStr.startsWith("C")) {
-                    cValue = valueStr;
-                } else {
-                    nValues.add(valueStr);
-                }
-            }
-
-            if (cValue != null) {
-                context.write(key, new Text(cValue));
-            }
-            for (String nValue : nValues) {
-                context.write(key, new Text(nValue));
-            }
-        }
-    }
-
-    // Reducer to calculate probabilities
-    public static class ProbabilityReducer extends Reducer<BigramKey, Text, Text, Text> {
         private final Text outputKey = new Text();
         private final Text outputValue = new Text();
 
         @Override
-        public void reduce(BigramKey key, Iterable<Text> values, Context context)
-                throws IOException, InterruptedException {
-
-            // Store C values and N records
-            long C0 = 0, C1 = 0, C2 = 0;
-            List<String> nRecords = new ArrayList<>();
-
-            // First pass to get all values
-            for (Text value : values) {
-                String[] parts = value.toString().split("\t");
-                if (parts[0].equals("C")) {
-                    C0 = Long.parseLong(parts[1]);
-                    C1 = Long.parseLong(parts[2]);
-                    C2 = Long.parseLong(parts[3]);
-                } else {
-                    nRecords.add(value.toString());
+        protected void setup(Context context) throws IOException, InterruptedException {
+            try {
+                Configuration conf = context.getConfiguration();
+                Path c0File = new Path(conf.get("c0_path"));
+                org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf);
+                try (org.apache.hadoop.fs.FSDataInputStream in = fs.open(c0File)) {
+                    C0 = Long.parseLong(in.readLine().trim());
+                    if (C0 <= 0) {
+                        throw new IOException("Invalid C0 value: " + C0);
+                    }
                 }
+            } catch (Exception e) {
+                context.getCounter("Error", "C0ReadError").increment(1);
+                throw new IOException("Failed to read C0", e);
             }
+        }
 
-            // Calculate probability for each N record
-            for (String record : nRecords) {
-                String[] parts = record.split("\t");
-                long N1 = Long.parseLong(parts[1]);
-                long N2 = Long.parseLong(parts[2]);
-                long N3 = Long.parseLong(parts[3]);
-                String w3 = parts[4];
+        @Override
+        public void reduce(TrigramKey key, Iterable<Text> values, Context context)
+                throws IOException, InterruptedException {
+            try {
+                if (currentW1 == null || !currentW1.equals(key.w1) ||
+                        !currentW2.equals(key.w2) || key.w3.equals("*")) {
 
-                // Calculate k2 and k3
-                double k2 = (Math.log(N2 + 1) + 1) / (Math.log(N2 + 1) + 2);
-                double k3 = (Math.log(N3 + 1) + 1) / (Math.log(N3 + 1) + 2);
+                    currentW1 = key.w1;
+                    currentW2 = key.w2;
 
-                // Calculate final probability
-                double prob = k3 * (N3 / (double)C2) +
-                        (1 - k3) * k2 * (N2 / (double)C1) +
-                        (1 - k3) * (1 - k2) * (N1 / (double)C0);
+                    if (key.w3.equals("*")) {
+                        // Process C record
+                        String[] parts = values.iterator().next().toString().split("\t");
+                        cValues = new long[]{C0,
+                                Long.parseLong(parts[0]),  // C1
+                                Long.parseLong(parts[1])}; // C2
 
-                // Emit result
-                outputKey.set(String.format("%s %s %s", key.w1, key.w2, w3));
-                outputValue.set(String.format("%.6f", prob));
-                context.write(outputKey, outputValue);
+                        if (cValues[1] <= 0 || cValues[2] <= 0) {
+                            context.getCounter("Error", "InvalidCValues").increment(1);
+                            cValues = null;
+                        }
+                        return;
+                    }
+                }
+
+                // Skip if no valid C values
+                if (cValues == null) return;
+
+                // Process N records
+                for (Text value : values) {
+                    String[] parts = value.toString().split("\t");
+                    long N1 = Long.parseLong(parts[0]);
+                    long N2 = Long.parseLong(parts[1]);
+                    long N3 = Long.parseLong(parts[2]);
+
+                    // Calculate k2 and k3
+                    double k2 = (Math.log(N2 + 1) + 1) / (Math.log(N2 + 1) + 2);
+                    double k3 = (Math.log(N3 + 1) + 1) / (Math.log(N3 + 1) + 2);
+
+                    // Calculate probability
+                    double prob = k3 * (N3 / (double)cValues[2]) +
+                            (1 - k3) * k2 * (N2 / (double)cValues[1]) +
+                            (1 - k3) * (1 - k2) * (N1 / (double)cValues[0]);
+
+                    if (!Double.isNaN(prob) && !Double.isInfinite(prob) && prob >= 0 && prob <= 1) {
+                        outputKey.set(String.format("%s %s %s", currentW1, currentW2, key.w3));
+                        outputValue.set(String.format("%.6f", prob));
+                        context.write(outputKey, outputValue);
+                    }
+                }
+            } catch (Exception e) {
+                context.getCounter("Error", "ReduceError").increment(1);
             }
         }
     }
@@ -234,24 +185,18 @@ public class Step2 {
         Job job = Job.getInstance(conf, "Word Prediction Step 2");
         job.setJarByClass(Step2.class);
 
-        // Set mappers and reducer
-        job.setMapperClass(CMapper.class);
-        job.setMapperClass(NMapper.class);
-        job.setCombinerClass(ProbabilityCombiner.class);
-        job.setPartitionerClass(NMapper.BigramPartitioner.class);
+        job.setMapperClass(Step2Mapper.class);
+        job.setPartitionerClass(TrigramPartitioner.class);
         job.setReducerClass(ProbabilityReducer.class);
 
-        // Set output types
-        job.setMapOutputKeyClass(BigramKey.class);
+        job.setMapOutputKeyClass(TrigramKey.class);
         job.setMapOutputValueClass(Text.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
 
-        // Set input/output paths
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-        // Set input/output formats
         job.setInputFormatClass(TextInputFormat.class);
         job.setOutputFormatClass(TextOutputFormat.class);
 
