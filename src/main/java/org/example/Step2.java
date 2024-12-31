@@ -163,7 +163,7 @@ public class Step2 {
 
                     if (!Double.isNaN(prob) && !Double.isInfinite(prob) && prob >= 0 && prob <= 1) {
                         outputKey.set(String.format("%s %s %s", currentW1, currentW2, key.w3));
-                        outputValue.set(String.format("%.6f", prob));
+                        outputValue.set(String.format("%.3f", prob));
                         context.write(outputKey, outputValue);
                     }
                 }
