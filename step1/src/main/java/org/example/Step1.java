@@ -15,6 +15,7 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
@@ -298,15 +299,24 @@ public class Step1 {
         job.setOutputValueClass(Text.class);
 
         // Set input paths with appropriate mappers
+//        MultipleInputs.addInputPath(job,
+//                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/1gram/data"),
+//                SequenceFileInputFormat.class, UniMapper.class);
+//        MultipleInputs.addInputPath(job,
+//                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/2gram/data"),
+//                SequenceFileInputFormat.class, BiMapper.class);
+//        MultipleInputs.addInputPath(job,
+//                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/3gram/data"),
+//                SequenceFileInputFormat.class, TriMapper.class);
         MultipleInputs.addInputPath(job,
-                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/1gram/data"),
-                SequenceFileInputFormat.class, UniMapper.class);
+                new Path("s3://yuvalhagarwordprediction/1gram-test.txt"),
+                TextInputFormat.class, UniMapper.class);;
         MultipleInputs.addInputPath(job,
-                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/2gram/data"),
-                SequenceFileInputFormat.class, BiMapper.class);
+                new Path("s3://yuvalhagarwordprediction/2gram-test.txt"),
+                TextInputFormat.class, BiMapper.class);
         MultipleInputs.addInputPath(job,
-                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/3gram/data"),
-                SequenceFileInputFormat.class, TriMapper.class);
+                new Path("s3://yuvalhagarwordprediction/3gram-test.txt"),
+                TextInputFormat.class, TriMapper.class);
 
         // Set output path
         //FileOutputFormat.setOutputPath(job, new Path(args[1]));

@@ -1,2 +1,2 @@
 Manifest-Version: 1.0
-Main-Class: Step2
+Main-Class: org.example.Step2

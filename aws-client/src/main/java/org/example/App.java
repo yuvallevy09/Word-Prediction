@@ -48,7 +48,7 @@ public class App {
                 .withActionOnFailure("TERMINATE_JOB_FLOW");
         // Step 2
         HadoopJarStepConfig step2 = new HadoopJarStepConfig()
-                .withJar("s3://yuvalhagarwordprediction/Step2.jar")
+                .withJar("s3://yuvalhagarwordprediction/step2.jar")
                 .withMainClass("Step2");
 
         StepConfig stepConfig2 = new StepConfig()
