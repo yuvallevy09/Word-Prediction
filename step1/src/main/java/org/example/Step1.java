@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import org.apache.log4j.Logger;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -20,6 +21,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 public class Step1 {
+    private static final Logger logger = Logger.getLogger(Step1.class);
     static Set<String> stopWords = new HashSet<>(Arrays.asList(
             "׳", "של", "רב", "פי", "עם", "עליו", "עליהם", "על", "עד", "מן", "מכל", "מי", "מהם", "מה", "מ",
             "למה", "לכל", "לי", "לו", "להיות", "לה", "לא", "כן", "כמה", "כלי", "כל", "כי", "יש", "ימים", "יותר",
@@ -132,6 +134,8 @@ public class Step1 {
         @Override
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String[] parts = value.toString().split("\t");
+            logger.info("Processing UniGram: " + value.toString());
+            logger.info("length: " + parts.length);
             if (parts.length >= 3) {
                 String word = parts[0].trim();
                 // Skip stop words
@@ -145,7 +149,11 @@ public class Step1 {
                     context.write(new CompositeKey("N", "*", "*", word), count);
                     // Emit for C1
                     context.write(new CompositeKey("C", "*", word, "*"), count);
+                    logger.info("Mapped UniGram: " + word + ", Count: " + matchCount);
                 }
+            }
+            else {
+                logger.warn("Invalid UniGram record: " + value.toString());
             }
         }
     }
@@ -153,9 +161,12 @@ public class Step1 {
     public static class BiMapper extends Mapper<LongWritable, Text, CompositeKey, LongWritable> {
         private final LongWritable count = new LongWritable();
 
+
         @Override
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String[] parts = value.toString().split("\t");
+            logger.info("Processing BiGram: " + value.toString());
+            logger.info("length: " + parts.length);
             if (parts.length >= 3) {
                 String[] words = parts[0].split(" ");
                 if (words.length == 2) {
@@ -171,7 +182,11 @@ public class Step1 {
                     // Only emit if this bigram will be needed
                     context.write(new CompositeKey("N", "*", w1, w2), count);
                     context.write(new CompositeKey("C", w1, w2, "*"), count); // w3 is not compared for C-Keys
+                    logger.info("Mapped BiGram: " + w1 + " " + w2 + ", Count: " + matchCount);
                 }
+            }
+            else {
+                logger.warn("Invalid BiGram record: " + value.toString());
             }
         }
     }
@@ -182,6 +197,7 @@ public class Step1 {
         @Override
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String[] parts = value.toString().split("\t");
+            logger.info("Processing TriGram: " + value.toString());
             if (parts.length >= 3) {
                 String[] words = parts[0].split(" ");
                 if (words.length == 3) {
@@ -197,7 +213,11 @@ public class Step1 {
 
                     // Emit for N3
                     context.write(new CompositeKey("N", w1, w2, w3), count);
+                    logger.info("Mapped TriGram: " + w1 + " " + w2 + " "+ w3+", Count: " + matchCount);
                 }
+            }
+            else {
+                logger.warn("Invalid TriGram record: " + value.toString());
             }
         }
     }
@@ -243,6 +263,8 @@ public class Step1 {
                     outputKey.set(String.format("N\t%s\t%s\t%s", key.getW1(), key.getW2(), key.getW3()));
                     outputValue.set(String.format("%d\t%d\t%d", denW, denPair, sum));
                     context.write(outputKey, outputValue);
+                    logger.info("Reduced NGram: " + outputKey.toString() + ", Values: " + outputValue.toString());
+
                 }
             } else {
                 // Handle C-type records
@@ -253,6 +275,8 @@ public class Step1 {
                     outputKey.set(String.format("C\t%s\t%s", key.getW1(), key.getW2()));
                     outputValue.set(String.format("%d\t%d", denW, sum));
                     context.write(outputKey, outputValue);
+                    logger.info("Reduced CGram: " + outputKey.toString() + ", Values: " + outputValue.toString());
+
                 }
             }
         }
@@ -271,6 +295,7 @@ public class Step1 {
             }
             result.set(sum);
             context.write(key, result);
+            logger.info("Combined: " + key.toString() + ", Sum: " + sum);
         }
     }
 
@@ -327,17 +352,20 @@ public class Step1 {
 
         // Run job and get C0
         boolean success = job.waitForCompletion(true);
-        if (success) {
-            // Get C0 value from counter
-            long c0 = job.getCounters().findCounter(UniMapper.Counters.TOTAL_WORDS).getValue();
-            // Write C0 to a file in the output directory
-            Configuration conf2 = new Configuration();
-            org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf2); //need to check
-            Path c0File = new Path("s3://yuvalhagarwordprediction/output_step1" + "/C0.txt");
-            org.apache.hadoop.fs.FSDataOutputStream out = fs.create(c0File);
-            out.writeBytes(String.valueOf(c0));
-            out.close();
-        }
+//        if (success) {
+//            // Get C0 value from counter
+//            long c0 = job.getCounters().findCounter(UniMapper.Counters.TOTAL_WORDS).getValue();
+//            // Write C0 to a file in the output directory
+//            Configuration conf2 = new Configuration();
+//            conf2.set("fs.defaultFS", "s3://yuvalhagarwordprediction");
+//            conf2.set("fs.s3a.endpoint", "s3.amazonaws.com");
+//            org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf2); //need to check
+//            Path c0File = new Path("s3a://yuvalhagarwordprediction/output_step1/C0.txt");
+//            try (org.apache.hadoop.fs.FSDataOutputStream out = fs.create(c0File)) {
+//                out.writeBytes(String.valueOf(c0));
+//                out.close();
+//            }
+//        }
         System.exit(success ? 0 : 1);
     }
 }

@@ -23,6 +23,9 @@ public class Step2 {
         private String w2;
         private String w3;
 
+        public TrigramKey() {
+        }
+
         public TrigramKey(String w1, String w2, String w3) {
             this.w1 = w1;
             this.w2 = w2;
@@ -101,20 +104,22 @@ public class Step2 {
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
-            try {
-                Configuration conf = context.getConfiguration();
-                Path c0File = new Path(conf.get("c0_path"));
-                org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf);
-                try (org.apache.hadoop.fs.FSDataInputStream in = fs.open(c0File)) {
-                    C0 = Long.parseLong(in.readLine().trim());
-                    if (C0 <= 0) {
-                        throw new IOException("Invalid C0 value: " + C0);
-                    }
-                }
-            } catch (Exception e) {
-                context.getCounter("Error", "C0ReadError").increment(1);
-                throw new IOException("Failed to read C0", e);
-            }
+//            try {
+//                Configuration conf = context.getConfiguration();
+//                Path c0File = new Path(conf.get("c0_path"));
+//                org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf);
+//                try (org.apache.hadoop.fs.FSDataInputStream in = fs.open(c0File)) {
+//                    C0 = Long.parseLong(in.readLine().trim());
+//                    if (C0 <= 0) {
+//                        throw new IOException("Invalid C0 value: " + C0);
+//                    }
+//                }
+//            } catch (Exception e) {
+//                context.getCounter("Error", "C0ReadError").increment(1);
+//                throw new IOException("Failed to read C0", e);
+//            }
+            C0 = 100;
+
         }
 
         @Override
@@ -180,7 +185,7 @@ public class Step2 {
 //        }
 
         Configuration conf = new Configuration();
-        conf.set("c0_path", "s3://yuvalhagarwordprediction/output_step1" + "/C0.txt");
+//        conf.set("c0_path", "s3://yuvalhagarwordprediction/output_step1" + "/C0.txt");
 
         Job job = Job.getInstance(conf,"Word Prediction Step 2");
         job.setJarByClass(Step2.class);
