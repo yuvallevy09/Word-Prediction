@@ -1,9 +1,14 @@
 package org.example;
 
+import java.io.BufferedReader;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.InputStreamReader;
+
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -16,8 +21,20 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.log4j.Logger;
 
 public class Step2 {
+
+    private static final Logger logger = Logger.getLogger(Step2.class);
+
+    public static enum Counters {
+        MISSING_C0,
+        INVALID_C0,
+        PROCESSING_ERRORS
+    }
+
+
+
     public static class TrigramKey implements WritableComparable<TrigramKey> {
         private String w1;
         private String w2;
@@ -27,6 +44,9 @@ public class Step2 {
         }
 
         public TrigramKey(String w1, String w2, String w3) {
+            if (w1 == null || w2 == null || w3 == null) {
+                throw new IllegalArgumentException("TrigramKey components cannot be null");
+            }
             this.w1 = w1;
             this.w2 = w2;
             this.w3 = w3;
@@ -102,25 +122,37 @@ public class Step2 {
         private final Text outputKey = new Text();
         private final Text outputValue = new Text();
 
-        @Override
         protected void setup(Context context) throws IOException, InterruptedException {
-//            try {
-//                Configuration conf = context.getConfiguration();
-//                Path c0File = new Path(conf.get("c0_path"));
-//                org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf);
-//                try (org.apache.hadoop.fs.FSDataInputStream in = fs.open(c0File)) {
-//                    C0 = Long.parseLong(in.readLine().trim());
-//                    if (C0 <= 0) {
-//                        throw new IOException("Invalid C0 value: " + C0);
-//                    }
-//                }
-//            } catch (Exception e) {
-//                context.getCounter("Error", "C0ReadError").increment(1);
-//                throw new IOException("Failed to read C0", e);
-//            }
-            C0 = 100;
-
+            Configuration conf = context.getConfiguration();
+            Path c0File = new Path("s3://yuvalhagarwordprediction/output_step1/C0.txt");
+            FileSystem fs = c0File.getFileSystem(conf);
+            
+            if (!fs.exists(c0File)) {
+                context.getCounter(Counters.MISSING_C0).increment(1);
+                logger.error("C0.txt file not found in Step1 output directory");
+                throw new IOException("C0.txt file not found in Step1 output directory");
+            }
+        
+            try (FSDataInputStream in = fs.open(c0File);
+                 BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
+                String line = reader.readLine();
+                if (line == null || line.trim().isEmpty()) {
+                    context.getCounter(Counters.INVALID_C0).increment(1);
+                    logger.error("C0.txt is empty");
+                    throw new IOException("C0.txt is empty");
+                }
+                
+                C0 = Long.parseLong(line.trim());
+                if (C0 <= 0) {
+                    context.getCounter(Counters.INVALID_C0).increment(1);
+                    logger.error("Invalid C0 value: " + C0);
+                    throw new IOException("Invalid C0 value: " + C0);
+                }
+                logger.info("Successfully loaded C0 value: " + C0);
+            }
         }
+
+
 
         @Override
         public void reduce(TrigramKey key, Iterable<Text> values, Context context)

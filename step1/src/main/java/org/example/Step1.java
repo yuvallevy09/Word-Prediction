@@ -9,6 +9,8 @@ import java.util.Set;
 import org.apache.log4j.Logger;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -352,6 +354,20 @@ public class Step1 {
 
         // Run job and get C0
         boolean success = job.waitForCompletion(true);
+
+        if (success) {
+            // Get C0 value from counter
+            long c0 = job.getCounters().findCounter(UniMapper.Counters.TOTAL_WORDS).getValue();
+            
+            // Write C0 to a file in the output directory
+            Path outputPath = new Path("s3://yuvalhagarwordprediction/output_step1");
+            Path c0File = new Path(outputPath, "C0.txt");
+            
+            FileSystem fs = c0File.getFileSystem(conf);
+            try (FSDataOutputStream out = fs.create(c0File)) {
+                out.writeBytes(String.valueOf(c0));
+            }
+        }
 //        if (success) {
 //            // Get C0 value from counter
 //            long c0 = job.getCounters().findCounter(UniMapper.Counters.TOTAL_WORDS).getValue();
