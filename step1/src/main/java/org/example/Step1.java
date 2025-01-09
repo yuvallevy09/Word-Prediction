@@ -302,12 +302,6 @@ public class Step1 {
     }
 
     public static void main(String[] args) throws Exception {
-        // Input validation
-//        if (args.length != 2) {
-//            System.err.println("Usage: Step1 <input path> <output path>");
-//            System.exit(2);
-//        }
-
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "Word Prediction Step 1");
         job.setJarByClass(Step1.class);
@@ -326,24 +320,24 @@ public class Step1 {
         job.setOutputValueClass(Text.class);
 
         // Set input paths with appropriate mappers
-//        MultipleInputs.addInputPath(job,
-//                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/1gram/data"),
-//                SequenceFileInputFormat.class, UniMapper.class);
-//        MultipleInputs.addInputPath(job,
-//                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/2gram/data"),
-//                SequenceFileInputFormat.class, BiMapper.class);
-//        MultipleInputs.addInputPath(job,
-//                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/3gram/data"),
-//                SequenceFileInputFormat.class, TriMapper.class);
         MultipleInputs.addInputPath(job,
-                new Path("s3://yuvalhagarwordprediction/1gram-test.txt"),
-                TextInputFormat.class, UniMapper.class);;
+                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/1gram/data"),
+                SequenceFileInputFormat.class, UniMapper.class);
         MultipleInputs.addInputPath(job,
-                new Path("s3://yuvalhagarwordprediction/2gram-test.txt"),
-                TextInputFormat.class, BiMapper.class);
+                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/2gram/data"),
+                SequenceFileInputFormat.class, BiMapper.class);
         MultipleInputs.addInputPath(job,
-                new Path("s3://yuvalhagarwordprediction/3gram-test.txt"),
-                TextInputFormat.class, TriMapper.class);
+                new Path("s3://datasets.elasticmapreduce/ngrams/books/20090715/heb-all/3gram/data"),
+                SequenceFileInputFormat.class, TriMapper.class);
+//        MultipleInputs.addInputPath(job,
+//                new Path("s3://yuvalhagarwordprediction/1gram-test.txt"),
+//                TextInputFormat.class, UniMapper.class);;
+//        MultipleInputs.addInputPath(job,
+//                new Path("s3://yuvalhagarwordprediction/2gram-test.txt"),
+//                TextInputFormat.class, BiMapper.class);
+//        MultipleInputs.addInputPath(job,
+//                new Path("s3://yuvalhagarwordprediction/3gram-test.txt"),
+//                TextInputFormat.class, TriMapper.class);
 
         // Set output path
         //FileOutputFormat.setOutputPath(job, new Path(args[1]));
@@ -368,20 +362,6 @@ public class Step1 {
                 out.writeBytes(String.valueOf(c0));
             }
         }
-//        if (success) {
-//            // Get C0 value from counter
-//            long c0 = job.getCounters().findCounter(UniMapper.Counters.TOTAL_WORDS).getValue();
-//            // Write C0 to a file in the output directory
-//            Configuration conf2 = new Configuration();
-//            conf2.set("fs.defaultFS", "s3://yuvalhagarwordprediction");
-//            conf2.set("fs.s3a.endpoint", "s3.amazonaws.com");
-//            org.apache.hadoop.fs.FileSystem fs = org.apache.hadoop.fs.FileSystem.get(conf2); //need to check
-//            Path c0File = new Path("s3a://yuvalhagarwordprediction/output_step1/C0.txt");
-//            try (org.apache.hadoop.fs.FSDataOutputStream out = fs.create(c0File)) {
-//                out.writeBytes(String.valueOf(c0));
-//                out.close();
-//            }
-//        }
         System.exit(success ? 0 : 1);
     }
 }

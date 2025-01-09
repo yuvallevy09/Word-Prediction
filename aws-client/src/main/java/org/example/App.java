@@ -17,7 +17,7 @@ public class App {
     public static AmazonEC2 ec2;
     public static AmazonElasticMapReduce emr;
 
-    public static int numberOfInstances = 1; // need to change!
+    public static int numberOfInstances = 5; // need to change!
 
     public static void main(String[]args){
         credentialsProvider = new ProfileCredentialsProvider();
