@@ -209,7 +209,7 @@ Word-Prediction/
 ---
 
 ## Contributors
-- Yuval Levy (209792654)
-- Hagar Samimi‑Golan (206396079)
+- Yuval Levy 
+- Hagar Samimi‑Golan 
 
 
