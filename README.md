@@ -1,6 +1,6 @@
 # Hebrew Word Prediction on AWS EMR (MapReduce)
 
-A production-style data engineering/NLP pipeline that builds a trigram-based knowledge base for Hebrew word prediction using Hadoop MapReduce on Amazon EMR. The system ingests the Google Books Hebrew N‑Grams (1‑gram/2‑gram/3‑gram), computes smoothed conditional probabilities P(w3 | w1, w2), and writes an ordered knowledge base for suggestion/ranking use cases.
+A distributed NLP pipeline that builds a trigram-based knowledge base for Hebrew word prediction using Hadoop MapReduce on Amazon EMR. The system ingests the Google Books Hebrew N‑Grams (1‑gram/2‑gram/3‑gram), computes smoothed conditional probabilities P(w3 | w1, w2), and writes an ordered knowledge base for suggestion/ranking use cases.
 
 ### Objective
 - **Build** a scalable pipeline that computes next‑word probabilities for Hebrew given two preceding words.
